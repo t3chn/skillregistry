@@ -13,7 +13,7 @@ notes:
 After running bootstrap inside a project repository, the following artifacts exist:
 
 ### Project state
-- `.agent/skillbank/` — a clone of the trusted bank pinned to a specific `ref`/commit.
+- `.agent/skillregistry/` — a clone of the trusted registry pinned to a specific `ref`/commit.
 - `.agent/project_profile.json` — detected project signals (stack, tooling, APIs).
 - `.agent/skills_state.json` — what was installed/generated, plus bank origin (`git`, `ref`, `commit`).
 - `.agent/skills_todo.md` — unresolved items that require human input.
@@ -29,7 +29,7 @@ After running bootstrap inside a project repository, the following artifacts exi
 ## Step 1: Standardize the bank repository layout
 Target structure:
 ```
-skillbank/
+skillregistry/
   skills/
     project-bootstrap/
       SKILL.md
@@ -79,13 +79,13 @@ Frontmatter:
 - `description`: detect stack, install baseline + language skills into `.codex/skills` and `.claude/skills`, generate overlays (`project-workflow`, `api-<name>`), write `.agent/*` state.
 
 Inputs:
-- `SKILLBANK_GIT` (required): git URL of the trusted bank repo.
-- `SKILLBANK_REF` (default `main`): branch/tag/commit.
+- `SKILLREGISTRY_GIT` (required): git URL or local path of the trusted registry repo.
+- `SKILLREGISTRY_REF` (default `main`): branch/tag/commit.
 
 Required behavior:
-1) Clone or update `.agent/skillbank` at `SKILLBANK_GIT` + `SKILLBANK_REF`.
+1) Clone or update `.agent/skillregistry` at `SKILLREGISTRY_GIT` + `SKILLREGISTRY_REF`.
 2) Run:
-   - `python3 .agent/skillbank/skills/project-bootstrap/scripts/bootstrap.py init`
+   - `python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init`
 3) Print next steps:
    - restart Codex if needed
    - review `.agent/skills_todo.md`
@@ -114,13 +114,20 @@ File: `skills/project-bootstrap/scripts/bootstrap.py`
 - Generate overlays into both runtimes:
   - `project-workflow/` from `templates/project-workflow.SKILL.template.md`
   - `api-<name>/` skeletons from `templates/api-skeleton.SKILL.template.md` (+ `references/TODO.md`)
+- Overlay update policy (default):
+  - Overwrite an overlay only if it is unchanged since the last generation (compare `generated_hash` stored in `.agent/skills_state.json`).
+  - If modified: do not overwrite; write the new candidate to `.agent/overlays_pending/<target>/<overlay>/SKILL.md` and add a TODO.
+  - If generation history is missing: do not overwrite (safe fallback), unless explicitly adopted.
 - Write `.agent/project_profile.json`, `.agent/skills_state.json`, `.agent/skills_todo.md`.
+- Remove stale bank skills that were previously installed by bootstrap but are no longer selected (based on previous `.agent/skills_state.json`).
 
 ### CLI interface
 `bootstrap.py init` supports:
 - `--targets codex,claude` (default both)
-- `--skillbank-git` or env `SKILLBANK_GIT` (required)
-- `--skillbank-ref` or env `SKILLBANK_REF` (default `main`)
+- `--skillregistry-git` or env `SKILLREGISTRY_GIT` (required)
+- `--skillregistry-ref` or env `SKILLREGISTRY_REF` (default `main`)
+- `--force-overwrite-overlays` (overwrite overlays even if modified; writes a backup)
+- `--adopt-existing-overlays` (if overlay exists but has no generation history, adopt it as baseline)
 
 ## Step 5: Overlay templates
 
@@ -137,17 +144,17 @@ One manual step: copy the `project-bootstrap/` skill folder into:
 
 ## Step 7: Run bootstrap in a project
 In the project repo root:
-- set `SKILLBANK_GIT` and optional `SKILLBANK_REF`
+- set `SKILLREGISTRY_GIT` and optional `SKILLREGISTRY_REF`
 - run bootstrap (via the skill’s documented procedure), which executes:
-  - clone/update `.agent/skillbank`
-  - `python3 .agent/skillbank/skills/project-bootstrap/scripts/bootstrap.py init`
+  - clone/update `.agent/skillregistry`
+  - `python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init`
 
 ## Step 8: Update to the latest bank version
-Re-run `init` with a newer `SKILLBANK_REF`:
+Re-run `init` with a newer `SKILLREGISTRY_REF`:
 ```bash
-python3 .agent/skillbank/skills/project-bootstrap/scripts/bootstrap.py init \
-  --skillbank-git <git-url> \
-  --skillbank-ref <ref>
+python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init \
+  --skillregistry-git <git-url-or-path> \
+  --skillregistry-ref <ref>
 ```
 
 Rationale:
@@ -159,4 +166,3 @@ After v0.1 is proven, extend materialization to include:
 - `.claude/hooks` for error logging and session retros (without bloating context),
 - a `postmortem` subagent that runs in an isolated context,
 - “lessons learned” stored as project-owned overlays or references.
-
