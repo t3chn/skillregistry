@@ -9,6 +9,9 @@ Design notes and history are tracked in beads; this repo stays “runtime-minima
 - `templates/` for generating project overlays
 - `catalog/skillsets.json` for bootstrap selection
 - `docs/PRD.md` for the canonical spec
+- `docs/BOOTSTRAP.md` for usage
+- `docs/SECURITY.md` for supply-chain guardrails
+- `docs/CONTRIBUTING.md` for adding skills
 
 ## Bootstrap usage (inside a project repo)
 
