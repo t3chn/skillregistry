@@ -1,0 +1,8 @@
+{
+  "baseline": ["tdd-loop", "code-review", "api-openapi-generic"],
+  "lang_go": ["lang-go"],
+  "lang_rust": ["lang-rust"],
+  "lang_python": ["lang-python"],
+  "lang_ts": ["lang-ts"]
+}
+
