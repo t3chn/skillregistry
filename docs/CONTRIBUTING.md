@@ -10,6 +10,7 @@ status: active
 2) Keep `SKILL.md` concise; move large content into `references/`.
 3) Add `scripts/` only when deterministic behavior is needed.
 4) Update `catalog/skillsets.json` if the skill is part of a baseline or language set.
+5) Run `python3 scripts/validate_registry.py` before committing.
 
 ## Add/modify overlay templates
 - Edit files under `templates/`.
@@ -21,4 +22,3 @@ status: active
   - never silently clobber modified overlays,
   - only remove stale bank skills previously installed by bootstrap,
   - write all decisions into `.agent/skills_todo.md` when uncertain.
-
