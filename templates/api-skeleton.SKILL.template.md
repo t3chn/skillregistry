@@ -23,4 +23,3 @@ description: Project API integration notes for {{API_NAME}}. Use when implementi
 ## References
 - See `references/TODO.md`
 - Add OpenAPI/Swagger spec into `references/` if available.
-

@@ -55,4 +55,3 @@ Disable cleanup with:
 ## Troubleshooting
 - If Codex doesn’t see new skills: restart Codex (required in common setups).
 - If overlays don’t update: check `.agent/skills_state.json` for `overlay_generated_hashes`, and `.agent/overlays_pending/` for candidates.
-

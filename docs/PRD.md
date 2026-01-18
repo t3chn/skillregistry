@@ -69,4 +69,3 @@ Skills/plugins are supply-chain surface:
 - enforce allowlisted registry sources,
 - review script-backed skills,
 - keep skills minimal; prefer instruction-only skills unless a script is necessary.
-

@@ -9,4 +9,3 @@ description: Go conventions and reliability checklist for agents.
 - Prefer `context.Context` threading; enforce timeouts for external calls.
 - Use table-driven tests; run `go test ./...`.
 - Keep packages small; avoid cyclic deps.
-

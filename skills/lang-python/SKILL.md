@@ -9,4 +9,3 @@ description: Python conventions and reliability checklist for agents (tests, for
 - Keep functions small and testable; add tests for edge cases.
 - Run `pytest` (or the project’s test command) before declaring done.
 - Use a formatter/linter if configured (e.g., ruff/black).
-

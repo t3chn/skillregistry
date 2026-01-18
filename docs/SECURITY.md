@@ -32,4 +32,3 @@ In consuming project repos, ignore:
 - `.agent/overlays_pending/`
 
 Commit project-owned overlays if desired (`project-workflow`, `api-*`).
-

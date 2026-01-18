@@ -12,4 +12,3 @@ description: How to integrate external APIs safely; how to store and query OpenA
   - idempotency where required
   - clear error classification (retryable vs non-retryable)
 - Keep a project overlay skill `api-<vendor>` with endpoints used by the project.
-

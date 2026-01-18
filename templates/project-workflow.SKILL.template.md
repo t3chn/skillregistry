@@ -16,4 +16,3 @@ description: Project-specific canonical workflow: how to build/test/lint/run and
 - Lint/format passes (or is explicitly skipped with a reason).
 - No TODO markers left in generated workflow unless explicitly accepted in `.agent/skills_todo.md`.
 - Changes are committed with clear message and minimal diff.
-

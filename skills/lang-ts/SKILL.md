@@ -9,4 +9,3 @@ description: TypeScript/JavaScript conventions and reliability checklist for age
 - Run `npm|pnpm|yarn` scripts for build/test/lint; keep CI green.
 - If TypeScript is present, ensure `tsc` (or equivalent) passes.
 - Avoid introducing new deps unless necessary; document why.
-

@@ -22,6 +22,7 @@ status: active
 4) Hooks live in `.pre-commit-config.yaml` and run:
    - `scripts/validate_registry.py`
    - `scripts/smoke_bootstrap.py`
+   - `trailing-whitespace`, `end-of-file-fixer`, `check-added-large-files`
 
 ## Add/modify overlay templates
 - Edit files under `templates/`.

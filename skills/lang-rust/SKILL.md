@@ -9,4 +9,3 @@ description: Rust conventions and reliability checklist for agents using cargo, 
 - Prefer explicit error types and context; avoid `unwrap()` in production code.
 - Keep changes compiling at each step; run `cargo test`.
 - Be mindful of lifetimes/ownership; keep APIs simple.
-

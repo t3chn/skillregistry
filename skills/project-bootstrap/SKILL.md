@@ -28,4 +28,3 @@ description: >
 - Never fetch skills from external catalogs.
 - Treat installed bank skills as read-only; project customizations go into overlay skills.
 - Never overwrite overlay skills silently unless the overlay is unchanged (safe overwrite policy) or `--force-overwrite-overlays`.
-

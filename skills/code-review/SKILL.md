@@ -10,4 +10,3 @@ description: Code review checklist for changes made by an agent.
 - Any security footguns (secrets, SSRF, injection, unsafe file ops)?
 - Any obvious performance regressions?
 - Is the diff minimal and well-structured?
-
