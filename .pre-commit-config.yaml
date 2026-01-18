@@ -1,0 +1,15 @@
+repos:
+  - repo: local
+    hooks:
+      - id: validate-registry
+        name: Validate registry layout
+        entry: python scripts/validate_registry.py
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: smoke-bootstrap
+        name: Bootstrap smoke test
+        entry: python scripts/smoke_bootstrap.py
+        language: python
+        pass_filenames: false
+        always_run: true
