@@ -17,11 +17,13 @@ status: active
    - `uv tool install prek` (or run once via `uvx prek`)
 2) Run all checks:
    - `uvx prek run --all-files`
+   - (or run tests only: `uvx pytest -q`)
 3) Optional: install the git hook:
    - `prek install`
 4) Hooks live in `.pre-commit-config.yaml` and run:
    - `scripts/validate_registry.py`
    - `scripts/smoke_bootstrap.py`
+   - `uvx pytest -q`
    - `trailing-whitespace`, `end-of-file-fixer`, `check-added-large-files`
 
 ## Add/modify overlay templates

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 REQUIRED_DIRS = {"skills", "templates", "catalog", "docs"}
-ALLOWED_DIRS = REQUIRED_DIRS | {"scripts"}
+ALLOWED_DIRS = REQUIRED_DIRS | {"scripts", "tests"}
 
 
 def parse_frontmatter(path: Path) -> Tuple[Dict[str, str], str]:
