@@ -6,12 +6,18 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
 # -------------------- helpers --------------------
+
+
+KNOWN_TARGETS = {"codex", "claude"}
+SUPPORTED_TARGETS = {"codex"}
+DEFAULT_REGISTRY_REPO = "t3chn/skillregistry"
 
 
 def run(cmd: List[str], cwd: Optional[Path] = None) -> str:
@@ -71,6 +77,41 @@ def remove_dir_if_exists(p: Path) -> bool:
 
 def exists_any(root: Path, names: List[str]) -> bool:
     return any((root / n).exists() for n in names)
+
+
+def remove_path(p: Path) -> None:
+    if p.is_dir():
+        shutil.rmtree(p)
+    else:
+        p.unlink()
+
+
+def skill_installer_script() -> Path:
+    codex_home = os.environ.get("CODEX_HOME") or str(Path.home() / ".codex")
+    return Path(codex_home) / "skills" / ".system" / "skill-installer" / "scripts" / "install-skill-from-github.py"
+
+
+def slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "proj"
+
+
+def infer_project_prefix(root: Path) -> str:
+    slug = slugify(root.name)
+    return slug[:4] if len(slug) >= 4 else slug
+
+
+def split_targets(targets: List[str]) -> Tuple[List[str], List[str]]:
+    supported: List[str] = []
+    unsupported: List[str] = []
+    for t in targets:
+        if t not in KNOWN_TARGETS:
+            raise RuntimeError(f"Unknown target: {t}")
+        if t in SUPPORTED_TARGETS:
+            supported.append(t)
+        else:
+            unsupported.append(t)
+    return supported, unsupported
 
 
 # -------------------- detection --------------------
@@ -207,6 +248,10 @@ def select_registry_skills(detected: Detected, skillsets: Dict[str, List[str]]) 
     return out
 
 
+def normalize_api_name(api: str) -> str:
+    return re.sub(r"[^a-z0-9_]+", "_", api).strip("_")
+
+
 # -------------------- registry clone/update --------------------
 
 
@@ -248,13 +293,13 @@ def clean_stale_registry_skills(
     project_root: Path,
     targets: List[str],
     prev_state: Dict[str, Any],
-    new_registry_skills: List[str],
+    selected_skills: List[str],
     cleaned: List[str],
 ) -> None:
     prev_registry = prev_state.get("registry_skills_installed") or []
     prev_registry = [str(x) for x in prev_registry]
 
-    to_remove = [s for s in prev_registry if s not in new_registry_skills]
+    to_remove = [s for s in prev_registry if s not in selected_skills]
     for s in to_remove:
         for t in targets:
             dst = skill_dst(project_root, t, s)
@@ -268,16 +313,66 @@ def install_registry_skills(
     skills: List[str],
     targets: List[str],
     todo: List[str],
-) -> None:
+    install_method: str,
+    force_overwrite: bool,
+    registry_ref: str,
+) -> Tuple[List[str], List[Dict[str, str]]]:
+    if install_method not in ("skill-installer", "local"):
+        raise RuntimeError(f"Unknown install method: {install_method}")
+    installer = None
+    if install_method == "skill-installer":
+        installer = skill_installer_script()
+        if not installer.exists():
+            raise RuntimeError(
+                f"skill-installer not found at {installer}. "
+                "Install it or rerun with --install-method local."
+            )
+
+    installed: List[str] = []
+    skipped: List[Dict[str, str]] = []
+    seen_installed = set()
     for name in skills:
         src = skillregistry_root / "skills" / name
         if not src.exists():
             todo.append(f"- Missing skill in registry: `{name}` (expected {src})")
+            skipped.append({"name": name, "reason": "missing in registry"})
             continue
         for t in targets:
             dst = skill_dst(project_root, t, name)
-            ensure_dir(dst.parent)
-            copy_dir(src, dst)
+            if dst.exists():
+                if not force_overwrite:
+                    skipped.append({"name": name, "reason": f"destination exists for {t}"})
+                    todo.append(
+                        f"- Registry skill `{name}` already exists for {t}; "
+                        "not overwriting. Use `--force-overwrite-registry-skills` to replace."
+                    )
+                    if dst.is_dir() and name not in seen_installed:
+                        installed.append(name)
+                        seen_installed.add(name)
+                    continue
+                remove_path(dst)
+            if install_method == "local":
+                ensure_dir(dst.parent)
+                copy_dir(src, dst)
+            else:
+                run(
+                    [
+                        sys.executable,
+                        str(installer),
+                        "--repo",
+                        DEFAULT_REGISTRY_REPO,
+                        "--ref",
+                        registry_ref,
+                        "--path",
+                        f"skills/{name}",
+                        "--dest",
+                        str(dst.parent),
+                    ]
+                )
+            if name not in seen_installed:
+                installed.append(name)
+                seen_installed.add(name)
+    return installed, skipped
 
 
 # -------------------- overlay safe-write policy --------------------
@@ -416,7 +511,7 @@ def generate_api_skeletons(
         todo.append("- Found OpenAPI/Swagger files:\n  " + "\n  ".join([f"* `{p}`" for p in detected.openapi_files]))
 
     for api in detected.apis:
-        name = re.sub(r"[^a-z0-9_]+", "_", api).strip("_")
+        name = normalize_api_name(api)
         if not name:
             continue
 
@@ -469,14 +564,35 @@ def main() -> int:
         help="branch/tag/commit (or env SKILLREGISTRY_REF)",
     )
     init.add_argument(
+        "--install-method",
+        choices=["skill-installer", "local"],
+        default="skill-installer",
+        help="install registry skills via skill-installer (default) or local copy",
+    )
+    init.add_argument(
+        "--force-overwrite-registry-skills",
+        action="store_true",
+        help="overwrite registry skills even if they already exist",
+    )
+    init.add_argument(
         "--force-overwrite-overlays",
         action="store_true",
         help="overwrite overlays even if modified (writes backup)",
     )
     init.add_argument(
+        "--force-create-overlays",
+        action="store_true",
+        help="create overlays even if similar overlays already exist",
+    )
+    init.add_argument(
         "--adopt-existing-overlays",
         action="store_true",
         help="if overlay exists but has no generation history, adopt current as baseline",
+    )
+    init.add_argument(
+        "--project-prefix",
+        default="",
+        help="override project prefix used for overlays",
     )
     init.add_argument(
         "--no-clean-stale-registry-skills",
@@ -491,60 +607,86 @@ def main() -> int:
     ensure_dir(root / ".claude" / "skills")
 
     targets = [t.strip() for t in args.targets.split(",") if t.strip()]
-    for t in targets:
-        if t not in ("codex", "claude"):
-            raise RuntimeError(f"Unknown target: {t}")
+    supported_targets, unsupported_targets = split_targets(targets)
 
     if not args.skillregistry_git:
         raise RuntimeError("Missing --skillregistry-git (or env SKILLREGISTRY_GIT)")
 
     state_path = root / ".agent" / "skills_state.json"
     prev_state = load_prev_state(state_path)
+    prev_prefix = prev_state.get("project_prefix")
+    if prev_prefix is not None:
+        prev_prefix = str(prev_prefix)
+    project_prefix = args.project_prefix or prev_prefix or infer_project_prefix(root)
 
     sr_root, sr_commit = ensure_skillregistry(root, args.skillregistry_git, args.skillregistry_ref)
 
     detected = detect_project(root)
     commands = infer_commands(root, detected)
     skillsets = load_skillsets(sr_root)
-    registry_skills = select_registry_skills(detected, skillsets)
+    registry_skills_selected = select_registry_skills(detected, skillsets)
 
     todo: List[str] = []
     cleaned: List[str] = []
+    if unsupported_targets:
+        for t in unsupported_targets:
+            todo.append(f"- Target `{t}` is not supported yet; skipping registry installs and overlays.")
 
-    if not args.no_clean_stale_registry_skills:
-        clean_stale_registry_skills(root, targets, prev_state, registry_skills, cleaned)
+    if not args.no_clean_stale_registry_skills and supported_targets:
+        clean_stale_registry_skills(root, supported_targets, prev_state, registry_skills_selected, cleaned)
 
-    install_registry_skills(sr_root, root, registry_skills, targets, todo)
+    registry_skills_installed: List[str] = []
+    registry_skills_skipped: List[Dict[str, str]] = []
+    if supported_targets:
+        registry_skills_installed, registry_skills_skipped = install_registry_skills(
+            sr_root,
+            root,
+            registry_skills_selected,
+            supported_targets,
+            todo,
+            install_method=args.install_method,
+            force_overwrite=args.force_overwrite_registry_skills,
+            registry_ref=args.skillregistry_ref,
+        )
 
     prev_gen_hashes: Dict[str, str] = prev_state.get("overlay_generated_hashes") or {}
     prev_gen_hashes = {str(k): str(v) for k, v in prev_gen_hashes.items()}
 
     new_gen_hashes: Dict[str, str] = dict(prev_gen_hashes)
+    overlays_skipped: List[Dict[str, str]] = []
+    if unsupported_targets:
+        for t in unsupported_targets:
+            overlays_skipped.append({"name": f"{t}/project-workflow", "reason": "unsupported target"})
+            for api in detected.apis:
+                name = normalize_api_name(api)
+                if name:
+                    overlays_skipped.append({"name": f"{t}/api-{name}", "reason": "unsupported target"})
 
-    generate_project_workflow(
-        skillregistry_root=sr_root,
-        project_root=root,
-        targets=targets,
-        commands=commands,
-        todo=todo,
-        prev_generated_hashes=prev_gen_hashes,
-        new_generated_hashes=new_gen_hashes,
-        force_overwrite=args.force_overwrite_overlays,
-        adopt_existing=args.adopt_existing_overlays,
-    )
-
-    if detected.apis or detected.openapi_files:
-        generate_api_skeletons(
+    if supported_targets:
+        generate_project_workflow(
             skillregistry_root=sr_root,
             project_root=root,
-            targets=targets,
-            detected=detected,
+            targets=supported_targets,
+            commands=commands,
             todo=todo,
             prev_generated_hashes=prev_gen_hashes,
             new_generated_hashes=new_gen_hashes,
             force_overwrite=args.force_overwrite_overlays,
             adopt_existing=args.adopt_existing_overlays,
         )
+
+        if detected.apis or detected.openapi_files:
+            generate_api_skeletons(
+                skillregistry_root=sr_root,
+                project_root=root,
+                targets=supported_targets,
+                detected=detected,
+                todo=todo,
+                prev_generated_hashes=prev_gen_hashes,
+                new_generated_hashes=new_gen_hashes,
+                force_overwrite=args.force_overwrite_overlays,
+                adopt_existing=args.adopt_existing_overlays,
+            )
 
     profile = {
         "repo_root": str(root),
@@ -562,7 +704,13 @@ def main() -> int:
     state = {
         "skillregistry": {"git": args.skillregistry_git, "ref": args.skillregistry_ref, "commit": sr_commit},
         "targets": targets,
-        "registry_skills_installed": registry_skills,
+        "project_prefix": project_prefix,
+        "install_method": args.install_method,
+        "registry_skills_selected": registry_skills_selected,
+        "registry_skills_installed": registry_skills_installed,
+        "registry_skills_skipped": registry_skills_skipped,
+        "unsupported_targets": unsupported_targets,
+        "overlays_skipped": overlays_skipped,
         "cleaned_registry_skills": cleaned,
         "overlay_generated_hashes": new_gen_hashes,
     }

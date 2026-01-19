@@ -29,6 +29,8 @@ def run_bootstrap(
         str(registry_root),
         "--skillregistry-ref",
         ref,
+        "--install-method",
+        "local",
     ]
     if extra_args:
         cmd.extend(extra_args)
@@ -60,15 +62,17 @@ def test_bootstrap_empty_project_creates_basics(tmp_path: Path) -> None:
 
     state = json.loads((project / ".agent" / "skills_state.json").read_text(encoding="utf-8"))
     assert state["registry_skills_installed"] == ["base-a", "base-b"]
+    assert state["unsupported_targets"] == ["claude"]
 
-    for target in ("codex", "claude"):
-        assert (project / f".{target}" / "skills" / "base-a" / "SKILL.md").is_file()
-        overlay = project / f".{target}" / "skills" / "project-workflow" / "SKILL.md"
-        assert overlay.is_file()
-        assert "TODO" in overlay.read_text(encoding="utf-8")
+    assert (project / ".codex" / "skills" / "base-a" / "SKILL.md").is_file()
+    overlay = project / ".codex" / "skills" / "project-workflow" / "SKILL.md"
+    assert overlay.is_file()
+    assert "TODO" in overlay.read_text(encoding="utf-8")
+    assert not (project / ".claude" / "skills" / "base-a" / "SKILL.md").exists()
 
     todo = (project / ".agent" / "skills_todo.md").read_text(encoding="utf-8")
     assert "Verify command `build`" in todo
+    assert "Target `claude` is not supported yet" in todo
 
 
 def test_bootstrap_python_project_and_api_overlay(tmp_path: Path) -> None:
@@ -85,14 +89,14 @@ def test_bootstrap_python_project_and_api_overlay(tmp_path: Path) -> None:
     result = run_bootstrap(project, registry, commit)
     assert result.returncode == 0, result.stderr
 
-    for target in ("codex", "claude"):
-        assert (project / f".{target}" / "skills" / "lang-python" / "SKILL.md").is_file()
-        workflow = project / f".{target}" / "skills" / "project-workflow" / "SKILL.md"
-        assert "pytest -q" in workflow.read_text(encoding="utf-8")
-        api_overlay = project / f".{target}" / "skills" / "api-stripe" / "SKILL.md"
-        assert api_overlay.is_file()
-        ref_todo = project / f".{target}" / "skills" / "api-stripe" / "references" / "TODO.md"
-        assert ref_todo.is_file()
+    assert (project / ".codex" / "skills" / "lang-python" / "SKILL.md").is_file()
+    workflow = project / ".codex" / "skills" / "project-workflow" / "SKILL.md"
+    assert "pytest -q" in workflow.read_text(encoding="utf-8")
+    api_overlay = project / ".codex" / "skills" / "api-stripe" / "SKILL.md"
+    assert api_overlay.is_file()
+    ref_todo = project / ".codex" / "skills" / "api-stripe" / "references" / "TODO.md"
+    assert ref_todo.is_file()
+    assert not (project / ".claude" / "skills" / "lang-python" / "SKILL.md").exists()
 
 
 def test_overlay_pending_when_modified(tmp_path: Path) -> None:

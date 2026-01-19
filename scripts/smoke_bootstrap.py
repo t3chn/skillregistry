@@ -48,6 +48,8 @@ def main() -> int:
                 str(repo_root),
                 "--skillregistry-ref",
                 commit,
+                "--install-method",
+                "local",
             ],
             cwd=project_root,
         )
@@ -58,29 +60,23 @@ def main() -> int:
         check((project_root / ".agent" / "skills_state.json").is_file(), "missing .agent/skills_state.json", errors)
         check((project_root / ".agent" / "skills_todo.md").is_file(), "missing .agent/skills_todo.md", errors)
 
-        for target in ("codex", "claude"):
-            for skill in baseline:
-                check(
-                    (project_root / f".{target}" / "skills" / skill / "SKILL.md").is_file(),
-                    f"missing {target} skill: {skill}",
-                    errors,
-                )
+        for skill in baseline:
             check(
-                (project_root / f".{target}" / "skills" / "project-workflow" / "SKILL.md").is_file(),
-                f"missing {target} project-workflow overlay",
+                (project_root / ".codex" / "skills" / skill / "SKILL.md").is_file(),
+                f"missing codex skill: {skill}",
                 errors,
             )
+        check(
+            (project_root / ".codex" / "skills" / "project-workflow" / "SKILL.md").is_file(),
+            "missing codex project-workflow overlay",
+            errors,
+        )
 
         state = json.loads((project_root / ".agent" / "skills_state.json").read_text(encoding="utf-8"))
         overlay_hashes = state.get("overlay_generated_hashes", {})
         check(
             "codex/project-workflow" in overlay_hashes,
             "missing overlay hash for codex/project-workflow",
-            errors,
-        )
-        check(
-            "claude/project-workflow" in overlay_hashes,
-            "missing overlay hash for claude/project-workflow",
             errors,
         )
 
@@ -105,6 +101,8 @@ def main() -> int:
                 str(repo_root),
                 "--skillregistry-ref",
                 commit,
+                "--install-method",
+                "local",
             ],
             cwd=project_root,
         )
