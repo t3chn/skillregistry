@@ -11,8 +11,8 @@ The CLI subcommand is `init`, but the process is designed to be repeatable.
 ## What bootstrap does
 1) Clones/updates the trusted registry into `.agent/skillregistry`.
 2) Detects stack (languages, Docker, CI) and basic API hints.
-3) Selects bank skills from `catalog/skillsets.json`.
-4) Installs bank skills into `.codex/skills` and `.claude/skills`.
+3) Selects registry skills from `catalog/skillsets.json`.
+4) Installs registry skills into `.codex/skills` and `.claude/skills`.
 5) Generates overlays (`project-workflow`, `api-*`) safely.
 6) Writes state and TODO artifacts under `.agent/`.
 
@@ -46,8 +46,8 @@ Targets:
 - `.agent/skills_state.json`
 - `.agent/skills_todo.md`
 - `.agent/overlays_pending/` (only when overlays were modified)
-- `.codex/skills/*` (bank skills + overlays)
-- `.claude/skills/*` (bank skills + overlays)
+- `.codex/skills/*` (registry skills + overlays)
+- `.claude/skills/*` (registry skills + overlays)
 
 ## Overlay update policy (default)
 Overlays are updated only if unchanged since last generation:
@@ -60,10 +60,10 @@ Flags:
 - `--adopt-existing-overlays`: if an overlay exists but has no generation history, adopt it as baseline.
 
 ## Clean-up behavior
-On rerun, bootstrap removes only stale bank skills it previously installed that are no longer selected (based on `.agent/skills_state.json`), then re-copies the currently selected bank skills.
+On rerun, bootstrap removes only stale registry skills it previously installed that are no longer selected (based on `.agent/skills_state.json`), then re-copies the currently selected registry skills.
 
 Disable cleanup with:
-- `--no-clean-stale-bank-skills`
+- `--no-clean-stale-registry-skills`
 
 ## Empty project behavior
 If no stack signals are detected, bootstrap installs only the baseline skills.

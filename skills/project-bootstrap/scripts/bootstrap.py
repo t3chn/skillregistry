@@ -185,7 +185,7 @@ def load_skillsets(skillregistry_root: Path) -> Dict[str, List[str]]:
     return json.loads(read_text(p))
 
 
-def select_bank_skills(detected: Detected, skillsets: Dict[str, List[str]]) -> List[str]:
+def select_registry_skills(detected: Detected, skillsets: Dict[str, List[str]]) -> List[str]:
     selected: List[str] = []
     selected += skillsets.get("baseline", [])
 
@@ -244,17 +244,17 @@ def skill_dst(project_root: Path, target: str, name: str) -> Path:
     raise RuntimeError(f"Unknown target: {target}")
 
 
-def clean_stale_bank_skills(
+def clean_stale_registry_skills(
     project_root: Path,
     targets: List[str],
     prev_state: Dict[str, Any],
-    new_bank_skills: List[str],
+    new_registry_skills: List[str],
     cleaned: List[str],
 ) -> None:
-    prev_bank = prev_state.get("bank_skills_installed") or []
-    prev_bank = [str(x) for x in prev_bank]
+    prev_registry = prev_state.get("registry_skills_installed") or []
+    prev_registry = [str(x) for x in prev_registry]
 
-    to_remove = [s for s in prev_bank if s not in new_bank_skills]
+    to_remove = [s for s in prev_registry if s not in new_registry_skills]
     for s in to_remove:
         for t in targets:
             dst = skill_dst(project_root, t, s)
@@ -262,7 +262,7 @@ def clean_stale_bank_skills(
                 cleaned.append(f"{t}:{s}")
 
 
-def install_bank_skills(
+def install_registry_skills(
     skillregistry_root: Path,
     project_root: Path,
     skills: List[str],
@@ -479,9 +479,9 @@ def main() -> int:
         help="if overlay exists but has no generation history, adopt current as baseline",
     )
     init.add_argument(
-        "--no-clean-stale-bank-skills",
+        "--no-clean-stale-registry-skills",
         action="store_true",
-        help="do not remove previously installed bank skills that are no longer selected",
+        help="do not remove previously installed registry skills that are no longer selected",
     )
 
     args = ap.parse_args()
@@ -506,15 +506,15 @@ def main() -> int:
     detected = detect_project(root)
     commands = infer_commands(root, detected)
     skillsets = load_skillsets(sr_root)
-    bank_skills = select_bank_skills(detected, skillsets)
+    registry_skills = select_registry_skills(detected, skillsets)
 
     todo: List[str] = []
     cleaned: List[str] = []
 
-    if not args.no_clean_stale_bank_skills:
-        clean_stale_bank_skills(root, targets, prev_state, bank_skills, cleaned)
+    if not args.no_clean_stale_registry_skills:
+        clean_stale_registry_skills(root, targets, prev_state, registry_skills, cleaned)
 
-    install_bank_skills(sr_root, root, bank_skills, targets, todo)
+    install_registry_skills(sr_root, root, registry_skills, targets, todo)
 
     prev_gen_hashes: Dict[str, str] = prev_state.get("overlay_generated_hashes") or {}
     prev_gen_hashes = {str(k): str(v) for k, v in prev_gen_hashes.items()}
@@ -562,8 +562,8 @@ def main() -> int:
     state = {
         "skillregistry": {"git": args.skillregistry_git, "ref": args.skillregistry_ref, "commit": sr_commit},
         "targets": targets,
-        "bank_skills_installed": bank_skills,
-        "cleaned_bank_skills": cleaned,
+        "registry_skills_installed": registry_skills,
+        "cleaned_registry_skills": cleaned,
         "overlay_generated_hashes": new_gen_hashes,
     }
     write_text(state_path, json.dumps(state, indent=2, ensure_ascii=False) + "\n")

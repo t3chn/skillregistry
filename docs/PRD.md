@@ -5,7 +5,7 @@ status: draft
 
 # PRD: skillregistry (trusted) + project-bootstrap skill v0.1
 
-**Статус:** Draft / v0.1  
+**Статус:** Draft / v0.1
 **Цель:** создать “trusted” репозиторий навыков `skillregistry` и bootstrap skill, который инициализирует проект (Codex + Claude) установкой нужных skills из доверенного банка и генерацией проектных overlay‑skills без поломки кастомизаций.
 
 ---
@@ -17,9 +17,9 @@ status: draft
 - проект на старте получает правильный фундамент: базовые skills + проектные “overlay” skills;
 - новые проекты быстро запускаются, а навыки обновляются удобно и безопасно.
 
-**Проблема:**  
-- наивная “память” через контекст шумит и ухудшает качество;  
-- навыки нужно ставить **только из нашего проверенного банка**, не из внешних каталогов;  
+**Проблема:**
+- наивная “память” через контекст шумит и ухудшает качество;
+- навыки нужно ставить **только из нашего проверенного банка**, не из внешних каталогов;
 - нельзя делать “универсальный установщик”, который не использует сильные стороны Codex/Claude — используем стандартные механизмы (директории skills и git), а различия платформ учитываем позже (plugins/hooks/subagents — отдельным шагом).
 
 ---
@@ -34,7 +34,7 @@ status: draft
 - `skills/project-bootstrap/*` — bootstrap skill + скрипт, который:
   - клонирует registry в проект (в `.agent/skillregistry`)
   - детектит стек проекта
-  - выбирает нужные bank skills
+  - выбирает нужные registry skills
   - устанавливает их в `.codex/skills` и `.claude/skills`
   - генерирует overlay‑skills (`project-workflow`, `api-*`) безопасно (не затирая ручные правки)
 
@@ -45,20 +45,20 @@ status: draft
 
 ## 3) Основные сценарии использования
 
-1) **Новый проект**  
+1) **Новый проект**
 Запускаем bootstrap → получаем набор skills под стек + проектный workflow skill + скелеты API skills.
 
-2) **Проект изменился (например, добавили Rust рядом с Go)**  
-Перезапускаем bootstrap → устанавливается новый набор bank‑skills, **старые лишние удаляются**, overlays обновляются безопасно.
+2) **Проект изменился (например, добавили Rust рядом с Go)**
+Перезапускаем bootstrap → устанавливается новый набор registry skills, **старые лишние удаляются**, overlays обновляются безопасно.
 
-3) **Обновление registry (новые версии skills)**  
-Меняем `SKILLREGISTRY_REF` и перезапускаем bootstrap → bank‑skills обновляются, overlays не ломаются.
+3) **Обновление registry (новые версии skills)**
+Меняем `SKILLREGISTRY_REF` и перезапускаем bootstrap → registry skills обновляются, overlays не ломаются.
 
 ---
 
 ## 4) Термины
 
-- **bank skills** — навыки из `skillregistry/skills/*`, считаются read-only (в проекте не редактируем напрямую).
+- **registry skills** — навыки из `skillregistry/skills/*`, считаются read-only (в проекте не редактируем напрямую).
 - **overlay skills** — проектные навыки, генерируемые bootstrap’ом (например `project-workflow`, `api-<name>`). Их можно редактировать вручную; bootstrap **не должен** ломать эти кастомизации.
 - **targets** — `codex` и `claude` (установка в `.codex/skills` и `.claude/skills`).
 
@@ -68,7 +68,7 @@ status: draft
 
 ### 5.1. Инициализация registry в проекте
 Bootstrap должен:
-- создавать/обновлять локальный клон registry в проекте:  
+- создавать/обновлять локальный клон registry в проекте:
   `.agent/skillregistry`
 - принимать:
   - `SKILLREGISTRY_GIT` (git URL или локальный путь)
@@ -109,23 +109,23 @@ Bootstrap должен:
 - добавить языковые skills на основе детекта
 - убрать дубликаты, сохраняя порядок
 
-### 5.4. Установка bank skills в проект
+### 5.4. Установка registry skills в проект
 
-Для каждого выбранного bank skill:
+Для каждого выбранного registry skill:
 
 - источник: `.agent/skillregistry/skills/<name>`
 - destination:
 
   - `.codex/skills/<name>`
   - `.claude/skills/<name>`
-- bank skills **перезаписываются** (они read-only, управляются registry).
+- registry skills **перезаписываются** (они read-only, управляются registry).
 
-### 5.5. Чистка устаревших bank skills
+### 5.5. Чистка устаревших registry skills
 
-Если набор bank skills изменился при повторном запуске bootstrap:
+Если набор registry skills изменился при повторном запуске bootstrap:
 
 - необходимо удалить те skills, которые были установлены bootstrap’ом ранее, но теперь не требуются.
-- удалять **только** то, что указано в предыдущем `.agent/skills_state.json` как `bank_skills_installed`, и отсутствует в новом списке.
+- удалять **только** то, что указано в предыдущем `.agent/skills_state.json` как `registry_skills_installed`, и отсутствует в новом списке.
 - не удалять overlay skills и не удалять неизвестные папки (вне state).
 
 ### 5.6. Генерация overlay skills (обязательные)
@@ -173,7 +173,7 @@ Overlay располагаются:
 Bootstrap должен записывать:
 
 - `.agent/project_profile.json` — детект и inferred команды
-- `.agent/skills_state.json` — registry git/ref/commit, targets, bank_skills_installed, cleaned_bank_skills, overlay_generated_hashes
+- `.agent/skills_state.json` — registry git/ref/commit, targets, registry_skills_installed, cleaned_registry_skills, overlay_generated_hashes
 - `.agent/skills_todo.md` — список TODO (проверить команды, заполнить API, merge overlay candidates и т.д.)
 - `.agent/overlays_pending/...` — кандидаты overlay файлов, если нельзя перезаписать текущие
 
@@ -214,7 +214,7 @@ skillregistry/
   README.md
 ```
 
-### 7.2. Минимальные bank skills
+### 7.2. Минимальные registry skills
 
 В v0.1 допустимы короткие заглушки (будем улучшать позже), главное — наличие SKILL.md и корректный `name`.
 
@@ -237,7 +237,7 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 
 - `--force-overwrite-overlays`
 - `--adopt-existing-overlays`
-- `--no-clean-stale-bank-skills`
+- `--no-clean-stale-registry-skills`
 
 Переменные окружения (альтернатива флагам):
 
@@ -265,7 +265,7 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 .agent/skills_todo.md
 .agent/overlays_pending/
 
-# Keep overlays, ignore bank skills (optional policy)
+# Keep overlays, ignore registry skills (optional policy)
 .codex/skills/*
 !.codex/skills/project-workflow/**
 !.codex/skills/api-*/**
@@ -288,7 +288,7 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 
    - `templates/project-workflow.SKILL.template.md`
    - `templates/api-skeleton.SKILL.template.md`
-5. добавить минимальные bank skills (SKILL.md для baseline + языковых)
+5. добавить минимальные registry skills (SKILL.md для baseline + языковых)
 6. добавить `skills/project-bootstrap/SKILL.md`
 
 ### Шаг B: реализовать `bootstrap.py`
@@ -305,10 +305,10 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 - `infer_commands()`:
 
   - Makefile/Taskfile/justfile → иначе defaults по языкам
-- `select_bank_skills()` по skillsets.json
+- `select_registry_skills()` по skillsets.json
 - `load_prev_state()` из `.agent/skills_state.json`
-- `clean_stale_bank_skills()` по prev_state
-- `install_bank_skills()` (copytree)
+- `clean_stale_registry_skills()` по prev_state
+- `install_registry_skills()` (copytree)
 - `safe_write_overlay()` с политикой C + флагами
 - генерация overlays:
 
@@ -322,7 +322,7 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 2. запустить bootstrap с `--skillregistry-git /Users/vi/projects/skillregistry`
 3. убедиться, что:
 
-   - bank skills поставились в `.codex/skills` и `.claude/skills`
+   - registry skills поставились в `.codex/skills` и `.claude/skills`
    - overlays созданы
    - state/todo записаны
 4. модифицировать вручную `.codex/skills/project-workflow/SKILL.md`
@@ -337,8 +337,8 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 - [ ] skillregistry создан, содержит структуру и файлы по PRD
 - [ ] bootstrap init работает в пустом проекте и в git‑репо
 - [ ] `.agent/skillregistry` создаётся и обновляется по ref
-- [ ] bank skills ставятся в `.codex/skills` и `.claude/skills`
-- [ ] stale bank skills удаляются по prev_state (если отключение флагом не включено)
+- [ ] registry skills ставятся в `.codex/skills` и `.claude/skills`
+- [ ] stale registry skills удаляются по prev_state (если отключение флагом не включено)
 - [ ] overlay `project-workflow` создаётся всегда
 - [ ] overlay `api-*` создаётся при обнаружении API (или openapi files) хотя бы как skeleton
 - [ ] overlay политика C соблюдается:

@@ -59,7 +59,7 @@ def test_bootstrap_empty_project_creates_basics(tmp_path: Path) -> None:
     assert (project / ".agent" / "skills_todo.md").is_file()
 
     state = json.loads((project / ".agent" / "skills_state.json").read_text(encoding="utf-8"))
-    assert state["bank_skills_installed"] == ["base-a", "base-b"]
+    assert state["registry_skills_installed"] == ["base-a", "base-b"]
 
     for target in ("codex", "claude"):
         assert (project / f".{target}" / "skills" / "base-a" / "SKILL.md").is_file()
@@ -163,7 +163,7 @@ def test_adopt_existing_overlay_sets_hash(tmp_path: Path) -> None:
     assert state["overlay_generated_hashes"]["codex/project-workflow"] == expected_hash
 
 
-def test_stale_bank_skills_cleanup(tmp_path: Path) -> None:
+def test_stale_registry_skills_cleanup(tmp_path: Path) -> None:
     registry = tmp_path / "registry"
     skillsets = {"baseline": ["base-a", "base-b"]}
     commit = create_registry(registry, skillsets)
@@ -185,7 +185,7 @@ def test_stale_bank_skills_cleanup(tmp_path: Path) -> None:
     assert (project / ".codex" / "skills" / "base-b").is_dir()
 
 
-def test_no_clean_stale_bank_skills(tmp_path: Path) -> None:
+def test_no_clean_stale_registry_skills(tmp_path: Path) -> None:
     registry = tmp_path / "registry"
     skillsets = {"baseline": ["base-a", "base-b"]}
     commit = create_registry(registry, skillsets)
@@ -200,7 +200,7 @@ def test_no_clean_stale_bank_skills(tmp_path: Path) -> None:
     write_json(registry / "catalog" / "skillsets.json", {"baseline": ["base-b"]})
     commit2 = commit_all(registry, "drop base-a")
 
-    second = run_bootstrap(project, registry, commit2, ["--no-clean-stale-bank-skills"])
+    second = run_bootstrap(project, registry, commit2, ["--no-clean-stale-registry-skills"])
     assert second.returncode == 0, second.stderr
 
     assert (project / ".codex" / "skills" / "base-a").is_dir()

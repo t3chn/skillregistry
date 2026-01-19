@@ -27,7 +27,7 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
   --skillregistry-ref <REF>
 ```
 
-Bootstrap is safe to re-run: bank skills update, overlays are protected.
+Bootstrap is safe to re-run: registry skills update, overlays are protected.
 Overlays are overwritten only if unchanged since last generation.
 Use `--force-overwrite-overlays` to overwrite anyway.
 

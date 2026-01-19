@@ -116,7 +116,7 @@ def test_safe_write_overlay_modified_writes_pending(tmp_path: Path) -> None:
     dst_file.parent.mkdir(parents=True, exist_ok=True)
     dst_file.write_text("modified", encoding="utf-8")
 
-    prev_gen = {"codex/project-workflow": module.sha256_bytes(b"original")} 
+    prev_gen = {"codex/project-workflow": module.sha256_bytes(b"original")}
     new_gen = dict(prev_gen)
     todo = []
 
