@@ -212,6 +212,88 @@ def test_similar_overlay_skips_creation(tmp_path: Path) -> None:
     assert any(item["name"] == f"codex/{workflow_name}" for item in state.get("overlays_skipped", []))
 
 
+def test_force_create_overlay_even_if_similar_exists(tmp_path: Path) -> None:
+    registry = tmp_path / "registry"
+    skillsets = {"baseline": ["base-a"]}
+    commit = create_registry(registry, skillsets)
+
+    project = tmp_path / "project"
+    project.mkdir()
+    init_git_repo(project)
+    existing = project / ".codex" / "skills" / "project-workflow" / "SKILL.md"
+    write_text(existing, "existing")
+
+    result = run_bootstrap(project, registry, commit, ["--force-create-overlays"])
+    assert result.returncode == 0, result.stderr
+
+    module = load_bootstrap_module()
+    prefix = module.infer_project_prefix(project)
+    workflow_name = f"{prefix}-project-workflow"
+    overlay = project / ".codex" / "skills" / workflow_name / "SKILL.md"
+    assert overlay.is_file()
+
+
+def test_registry_skill_skip_without_force(tmp_path: Path) -> None:
+    registry = tmp_path / "registry"
+    skillsets = {"baseline": ["base-a"]}
+    commit = create_registry(registry, skillsets)
+
+    project = tmp_path / "project"
+    project.mkdir()
+    init_git_repo(project)
+    existing = project / ".codex" / "skills" / "base-a" / "SKILL.md"
+    write_text(existing, "existing")
+
+    result = run_bootstrap(project, registry, commit)
+    assert result.returncode == 0, result.stderr
+
+    assert existing.read_text(encoding="utf-8") == "existing"
+    state = json.loads((project / ".agent" / "skills_state.json").read_text(encoding="utf-8"))
+    skipped = state.get("registry_skills_skipped", [])
+    assert any(item["name"] == "base-a" and "destination exists" in item["reason"] for item in skipped)
+
+
+def test_registry_skill_overwrite_with_force(tmp_path: Path) -> None:
+    registry = tmp_path / "registry"
+    skillsets = {"baseline": ["base-a"]}
+    commit = create_registry(registry, skillsets)
+
+    project = tmp_path / "project"
+    project.mkdir()
+    init_git_repo(project)
+    existing = project / ".codex" / "skills" / "base-a" / "SKILL.md"
+    write_text(existing, "existing")
+
+    result = run_bootstrap(project, registry, commit, ["--force-overwrite-registry-skills"])
+    assert result.returncode == 0, result.stderr
+
+    assert "existing" not in existing.read_text(encoding="utf-8")
+
+
+def test_project_prefix_override(tmp_path: Path) -> None:
+    registry = tmp_path / "registry"
+    skillsets = {"baseline": ["base-a"]}
+    commit = create_registry(registry, skillsets)
+
+    project = tmp_path / "project"
+    project.mkdir()
+    init_git_repo(project)
+    module = load_bootstrap_module()
+    inferred = module.infer_project_prefix(project)
+    override = "zzzz"
+    assert inferred != override
+
+    result = run_bootstrap(project, registry, commit, ["--project-prefix", override])
+    assert result.returncode == 0, result.stderr
+
+    state = json.loads((project / ".agent" / "skills_state.json").read_text(encoding="utf-8"))
+    assert state["project_prefix"] == override
+
+    overlay = project / ".codex" / "skills" / f"{override}-project-workflow" / "SKILL.md"
+    assert overlay.is_file()
+    assert not (project / ".codex" / "skills" / f"{inferred}-project-workflow").exists()
+
+
 def test_stale_registry_skills_cleanup(tmp_path: Path) -> None:
     registry = tmp_path / "registry"
     skillsets = {"baseline": ["base-a", "base-b"]}
