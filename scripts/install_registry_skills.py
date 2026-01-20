@@ -85,7 +85,12 @@ def main() -> int:
         default=DEFAULT_METHOD,
         help="Install method for skill-installer",
     )
-    parser.add_argument("--force-overwrite", action="store_true", help="Overwrite existing skill directories")
+    parser.add_argument(
+        "--force-overwrite",
+        "--force-overwrite-registry-skills",
+        action="store_true",
+        help="Overwrite existing skill directories",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON summary to stdout")
 
     args = parser.parse_args()

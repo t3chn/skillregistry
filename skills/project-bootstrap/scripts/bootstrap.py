@@ -86,9 +86,8 @@ def remove_path(p: Path) -> None:
         p.unlink()
 
 
-def skill_installer_script() -> Path:
-    codex_home = os.environ.get("CODEX_HOME") or str(Path.home() / ".codex")
-    return Path(codex_home) / "skills" / ".system" / "skill-installer" / "scripts" / "install-skill-from-github.py"
+def registry_installer_helper(skillregistry_root: Path) -> Path:
+    return skillregistry_root / "scripts" / "install_registry_skills.py"
 
 
 def slugify(value: str) -> str:
@@ -321,6 +320,25 @@ def clean_stale_registry_skills(
                 cleaned.append(f"{t}:{s}")
 
 
+def parse_registry_installer_summary(raw: str) -> Dict[str, Any]:
+    try:
+        summary = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSON from install_registry_skills.py: {exc}") from exc
+    if not isinstance(summary, dict):
+        raise RuntimeError("Invalid JSON from install_registry_skills.py: expected object")
+    return summary
+
+
+def format_registry_installer_failures(failed: List[Dict[str, str]]) -> str:
+    parts: List[str] = []
+    for entry in failed:
+        name = str(entry.get("name", "unknown"))
+        reason = str(entry.get("reason", "install failed"))
+        parts.append(f"{name}: {reason}")
+    return "; ".join(parts)
+
+
 def install_registry_skills(
     skillregistry_root: Path,
     project_root: Path,
@@ -333,59 +351,117 @@ def install_registry_skills(
 ) -> Tuple[List[str], List[Dict[str, str]]]:
     if install_method not in ("skill-installer", "local"):
         raise RuntimeError(f"Unknown install method: {install_method}")
-    installer = None
-    if install_method == "skill-installer":
-        installer = skill_installer_script()
-        if not installer.exists():
-            raise RuntimeError(
-                f"skill-installer not found at {installer}. "
-                "Install it or rerun with --install-method local."
-            )
 
     installed: List[str] = []
     skipped: List[Dict[str, str]] = []
     seen_installed = set()
+    available_skills: List[str] = []
     for name in skills:
         src = skillregistry_root / "skills" / name
         if not src.exists():
             todo.append(f"- Missing skill in registry: `{name}` (expected {src})")
             skipped.append({"name": name, "reason": "missing in registry"})
             continue
-        for t in targets:
-            dst = skill_dst(project_root, t, name)
-            if dst.exists():
-                if not force_overwrite:
-                    skipped.append({"name": name, "reason": f"destination exists for {t}"})
-                    todo.append(
-                        f"- Registry skill `{name}` already exists for {t}; "
-                        "not overwriting. Use `--force-overwrite-registry-skills` to replace."
-                    )
-                    if dst.is_dir() and name not in seen_installed:
-                        installed.append(name)
-                        seen_installed.add(name)
-                    continue
-                remove_path(dst)
-            if install_method == "local":
+        available_skills.append(name)
+
+    if not available_skills:
+        return installed, skipped
+
+    if install_method == "local":
+        for name in available_skills:
+            src = skillregistry_root / "skills" / name
+            for t in targets:
+                dst = skill_dst(project_root, t, name)
+                if dst.exists():
+                    if not force_overwrite:
+                        skipped.append({"name": name, "reason": f"destination exists for {t}"})
+                        todo.append(
+                            f"- Registry skill `{name}` already exists for {t}; "
+                            "not overwriting. Use `--force-overwrite-registry-skills` to replace."
+                        )
+                        if dst.is_dir() and name not in seen_installed:
+                            installed.append(name)
+                            seen_installed.add(name)
+                        continue
+                    remove_path(dst)
                 ensure_dir(dst.parent)
                 copy_dir(src, dst)
+                if name not in seen_installed:
+                    installed.append(name)
+                    seen_installed.add(name)
+        return installed, skipped
+
+    helper = registry_installer_helper(skillregistry_root)
+    if not helper.exists():
+        raise RuntimeError(
+            f"registry installer helper not found at {helper}. "
+            "Update the skillregistry clone or rerun with --install-method local."
+        )
+
+    for t in targets:
+        dest_root = skills_root(project_root, t)
+        cmd = [
+            sys.executable,
+            str(helper),
+            "--repo",
+            DEFAULT_REGISTRY_REPO,
+            "--ref",
+            registry_ref,
+            "--dest",
+            str(dest_root),
+            "--json",
+        ]
+        if force_overwrite:
+            cmd.append("--force-overwrite-registry-skills")
+        for name in available_skills:
+            cmd.extend(["--skill", name])
+
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        summary: Dict[str, Any] = {"installed": [], "skipped": [], "failed": []}
+        stdout = result.stdout.strip()
+        if stdout:
+            summary = parse_registry_installer_summary(stdout)
+        elif result.returncode == 0:
+            raise RuntimeError("install_registry_skills.py returned no JSON output")
+
+        failed_entries = summary.get("failed") or []
+        if result.returncode != 0 or failed_entries:
+            failure_reason = ""
+            if failed_entries:
+                failure_reason = format_registry_installer_failures(failed_entries)
+            elif result.stderr.strip():
+                failure_reason = result.stderr.strip()
             else:
-                run(
-                    [
-                        sys.executable,
-                        str(installer),
-                        "--repo",
-                        DEFAULT_REGISTRY_REPO,
-                        "--ref",
-                        registry_ref,
-                        "--path",
-                        f"skills/{name}",
-                        "--dest",
-                        str(dst.parent),
-                    ]
-                )
+                failure_reason = "install failed"
+            raise RuntimeError(f"Registry skill install failed for {t}: {failure_reason}")
+
+        for name in summary.get("installed") or []:
             if name not in seen_installed:
                 installed.append(name)
                 seen_installed.add(name)
+
+        for entry in summary.get("skipped") or []:
+            name = str(entry.get("name", "")).strip()
+            if not name:
+                continue
+            reason = str(entry.get("reason", "skipped"))
+            if reason == "destination exists":
+                reason = f"destination exists for {t}"
+                todo.append(
+                    f"- Registry skill `{name}` already exists for {t}; "
+                    "not overwriting. Use `--force-overwrite-registry-skills` to replace."
+                )
+                dst = skill_dst(project_root, t, name)
+                if dst.is_dir() and name not in seen_installed:
+                    installed.append(name)
+                    seen_installed.add(name)
+            skipped.append({"name": name, "reason": reason})
     return installed, skipped
 
 
