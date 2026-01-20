@@ -60,6 +60,10 @@ def main() -> int:
         check((project_root / ".agent" / "skills_state.json").is_file(), "missing .agent/skills_state.json", errors)
         check((project_root / ".agent" / "skills_todo.md").is_file(), "missing .agent/skills_todo.md", errors)
 
+        state = json.loads((project_root / ".agent" / "skills_state.json").read_text(encoding="utf-8"))
+        prefix = state.get("project_prefix") or ""
+        workflow_name = f"{prefix}-project-workflow" if prefix else "project-workflow"
+
         for skill in baseline:
             check(
                 (project_root / ".codex" / "skills" / skill / "SKILL.md").is_file(),
@@ -67,16 +71,15 @@ def main() -> int:
                 errors,
             )
         check(
-            (project_root / ".codex" / "skills" / "project-workflow" / "SKILL.md").is_file(),
+            (project_root / ".codex" / "skills" / workflow_name / "SKILL.md").is_file(),
             "missing codex project-workflow overlay",
             errors,
         )
 
-        state = json.loads((project_root / ".agent" / "skills_state.json").read_text(encoding="utf-8"))
         overlay_hashes = state.get("overlay_generated_hashes", {})
         check(
-            "codex/project-workflow" in overlay_hashes,
-            "missing overlay hash for codex/project-workflow",
+            f"codex/{workflow_name}" in overlay_hashes,
+            f"missing overlay hash for codex/{workflow_name}",
             errors,
         )
 
@@ -86,7 +89,7 @@ def main() -> int:
             print(f"\n{len(errors)} smoke test error(s).", file=sys.stderr)
             return 1
 
-        overlay_path = project_root / ".codex" / "skills" / "project-workflow" / "SKILL.md"
+        overlay_path = project_root / ".codex" / "skills" / workflow_name / "SKILL.md"
         overlay_path.write_text(
             overlay_path.read_text(encoding="utf-8") + "\n# local change\n",
             encoding="utf-8",
@@ -108,12 +111,12 @@ def main() -> int:
         )
 
         overlay_pending = (
-            project_root / ".agent" / "overlays_pending" / "codex" / "project-workflow" / "SKILL.md"
+            project_root / ".agent" / "overlays_pending" / "codex" / workflow_name / "SKILL.md"
         )
         errors = []
         check(
             overlay_pending.is_file(),
-            "expected overlays_pending for codex/project-workflow after modification",
+            f"expected overlays_pending for codex/{workflow_name} after modification",
             errors,
         )
         check(
@@ -123,11 +126,11 @@ def main() -> int:
         )
 
         overlay_pending_claude = (
-            project_root / ".agent" / "overlays_pending" / "claude" / "project-workflow" / "SKILL.md"
+            project_root / ".agent" / "overlays_pending" / "claude" / workflow_name / "SKILL.md"
         )
         check(
             not overlay_pending_claude.exists(),
-            "unexpected overlays_pending for claude/project-workflow",
+            f"unexpected overlays_pending for claude/{workflow_name}",
             errors,
         )
 

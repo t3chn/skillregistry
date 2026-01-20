@@ -114,6 +114,12 @@ def split_targets(targets: List[str]) -> Tuple[List[str], List[str]]:
     return supported, unsupported
 
 
+def prefixed_overlay_name(prefix: str, base_name: str) -> str:
+    if not prefix:
+        return base_name
+    return f"{prefix}-{base_name}"
+
+
 # -------------------- detection --------------------
 
 
@@ -289,6 +295,14 @@ def skill_dst(project_root: Path, target: str, name: str) -> Path:
     raise RuntimeError(f"Unknown target: {target}")
 
 
+def skills_root(project_root: Path, target: str) -> Path:
+    if target == "codex":
+        return project_root / ".codex" / "skills"
+    if target == "claude":
+        return project_root / ".claude" / "skills"
+    raise RuntimeError(f"Unknown target: {target}")
+
+
 def clean_stale_registry_skills(
     project_root: Path,
     targets: List[str],
@@ -388,6 +402,47 @@ def render_template(skillregistry_root: Path, template_name: str, vars: Dict[str
     return s
 
 
+def set_frontmatter_name(content: str, name: str) -> str:
+    lines = content.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return content
+    end = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end = i
+            break
+    if end is None:
+        return content
+    name_idx = None
+    for i in range(1, end):
+        if lines[i].startswith("name:"):
+            name_idx = i
+            break
+    if name_idx is None:
+        lines.insert(1, f"name: {name}")
+    else:
+        lines[name_idx] = f"name: {name}"
+    out = "\n".join(lines)
+    if content.endswith("\n"):
+        out += "\n"
+    return out
+
+
+def find_similar_overlays(project_root: Path, target: str, base_name: str) -> List[str]:
+    root = skills_root(project_root, target)
+    if not root.exists():
+        return []
+    matches: List[str] = []
+    suffix = f"-{base_name}"
+    for entry in root.iterdir():
+        if not entry.is_dir():
+            continue
+        name = entry.name
+        if name == base_name or name.endswith(suffix):
+            matches.append(name)
+    return matches
+
+
 def overlay_key(target: str, overlay_name: str) -> str:
     return f"{target}/{overlay_name}"
 
@@ -463,6 +518,11 @@ def generate_project_workflow(
     new_generated_hashes: Dict[str, str],
     force_overwrite: bool,
     adopt_existing: bool,
+    project_prefix: str,
+    force_create_overlays: bool,
+    prefix_changed: bool,
+    prev_prefix: Optional[str],
+    overlays_skipped: List[Dict[str, str]],
 ) -> None:
     required = ["build", "test", "lint", "run"]
     for r in required:
@@ -471,6 +531,7 @@ def generate_project_workflow(
                 f"- Verify command `{r}` in project-workflow (auto-inferred: `{commands.get(r, '<missing>')}`)"
             )
 
+    base_name = "project-workflow"
     body = render_template(
         skillregistry_root,
         "project-workflow.SKILL.template.md",
@@ -483,11 +544,29 @@ def generate_project_workflow(
     )
 
     for t in targets:
+        overlay_name = prefixed_overlay_name(project_prefix, base_name)
+        body_with_name = set_frontmatter_name(body, overlay_name)
+        dst_dir = skill_dst(project_root, t, overlay_name)
+        similar = [name for name in find_similar_overlays(project_root, t, base_name) if name != overlay_name]
+        if not dst_dir.exists() and similar and not force_create_overlays and not prefix_changed:
+            reason = f"similar overlay exists: {', '.join(similar)}"
+            overlays_skipped.append({"name": f"{t}/{overlay_name}", "reason": reason})
+            todo.append(
+                f"- Overlay `{t}/{overlay_name}` skipped because similar overlay exists: {', '.join(similar)}. "
+                "Use `--force-create-overlays` to create anyway."
+            )
+            continue
+        if prefix_changed and similar:
+            prev = prev_prefix or "<unknown>"
+            todo.append(
+                f"- Overlay prefix changed from `{prev}` to `{project_prefix}` for `{t}/{base_name}`; "
+                f"existing overlays not renamed: {', '.join(similar)}. Review/migrate manually."
+            )
         safe_write_overlay(
             project_root=project_root,
             target=t,
-            overlay_name="project-workflow",
-            new_content=body,
+            overlay_name=overlay_name,
+            new_content=body_with_name,
             prev_generated_hashes=prev_generated_hashes,
             new_generated_hashes=new_generated_hashes,
             todo=todo,
@@ -506,6 +585,11 @@ def generate_api_skeletons(
     new_generated_hashes: Dict[str, str],
     force_overwrite: bool,
     adopt_existing: bool,
+    project_prefix: str,
+    force_create_overlays: bool,
+    prefix_changed: bool,
+    prev_prefix: Optional[str],
+    overlays_skipped: List[Dict[str, str]],
 ) -> None:
     if detected.openapi_files:
         todo.append("- Found OpenAPI/Swagger files:\n  " + "\n  ".join([f"* `{p}`" for p in detected.openapi_files]))
@@ -515,24 +599,43 @@ def generate_api_skeletons(
         if not name:
             continue
 
+        base_name = f"api-{name}"
+        overlay_name = prefixed_overlay_name(project_prefix, base_name)
         body = render_template(skillregistry_root, "api-skeleton.SKILL.template.md", {"API_NAME": name})
+        created_any = False
 
         for t in targets:
-            overlay_name = f"api-{name}"
+            body_with_name = set_frontmatter_name(body, overlay_name)
             dst_dir = skill_dst(project_root, t, overlay_name)
+            similar = [s for s in find_similar_overlays(project_root, t, base_name) if s != overlay_name]
+            if not dst_dir.exists() and similar and not force_create_overlays and not prefix_changed:
+                reason = f"similar overlay exists: {', '.join(similar)}"
+                overlays_skipped.append({"name": f"{t}/{overlay_name}", "reason": reason})
+                todo.append(
+                    f"- Overlay `{t}/{overlay_name}` skipped because similar overlay exists: {', '.join(similar)}. "
+                    "Use `--force-create-overlays` to create anyway."
+                )
+                continue
+            if prefix_changed and similar:
+                prev = prev_prefix or "<unknown>"
+                todo.append(
+                    f"- Overlay prefix changed from `{prev}` to `{project_prefix}` for `{t}/{base_name}`; "
+                    f"existing overlays not renamed: {', '.join(similar)}. Review/migrate manually."
+                )
             ensure_dir(dst_dir / "references")
 
             safe_write_overlay(
                 project_root=project_root,
                 target=t,
                 overlay_name=overlay_name,
-                new_content=body,
+                new_content=body_with_name,
                 prev_generated_hashes=prev_generated_hashes,
                 new_generated_hashes=new_generated_hashes,
                 todo=todo,
                 force=force_overwrite,
                 adopt_existing=adopt_existing,
             )
+            created_any = True
 
             ref_todo = dst_dir / "references" / "TODO.md"
             if not ref_todo.exists():
@@ -541,7 +644,8 @@ def generate_api_skeletons(
                     "Fill: base_url, auth method, endpoints, rate limits, idempotency rules, errors.\n",
                 )
 
-        todo.append(f"- API skill overlay ensured: `api-{name}` (needs docs/scheme enrichment)")
+        if created_any:
+            todo.append(f"- API skill overlay ensured: `{overlay_name}` (needs docs/scheme enrichment)")
 
 
 # -------------------- entrypoint --------------------
@@ -618,6 +722,7 @@ def main() -> int:
     if prev_prefix is not None:
         prev_prefix = str(prev_prefix)
     project_prefix = args.project_prefix or prev_prefix or infer_project_prefix(root)
+    prefix_changed = prev_prefix is not None and prev_prefix != project_prefix
 
     sr_root, sr_commit = ensure_skillregistry(root, args.skillregistry_git, args.skillregistry_ref)
 
@@ -656,11 +761,13 @@ def main() -> int:
     overlays_skipped: List[Dict[str, str]] = []
     if unsupported_targets:
         for t in unsupported_targets:
-            overlays_skipped.append({"name": f"{t}/project-workflow", "reason": "unsupported target"})
+            pw_name = prefixed_overlay_name(project_prefix, "project-workflow")
+            overlays_skipped.append({"name": f"{t}/{pw_name}", "reason": "unsupported target"})
             for api in detected.apis:
                 name = normalize_api_name(api)
                 if name:
-                    overlays_skipped.append({"name": f"{t}/api-{name}", "reason": "unsupported target"})
+                    api_name = prefixed_overlay_name(project_prefix, f"api-{name}")
+                    overlays_skipped.append({"name": f"{t}/{api_name}", "reason": "unsupported target"})
 
     if supported_targets:
         generate_project_workflow(
@@ -673,6 +780,11 @@ def main() -> int:
             new_generated_hashes=new_gen_hashes,
             force_overwrite=args.force_overwrite_overlays,
             adopt_existing=args.adopt_existing_overlays,
+            project_prefix=project_prefix,
+            force_create_overlays=args.force_create_overlays,
+            prefix_changed=prefix_changed,
+            prev_prefix=prev_prefix,
+            overlays_skipped=overlays_skipped,
         )
 
         if detected.apis or detected.openapi_files:
@@ -686,6 +798,11 @@ def main() -> int:
                 new_generated_hashes=new_gen_hashes,
                 force_overwrite=args.force_overwrite_overlays,
                 adopt_existing=args.adopt_existing_overlays,
+                project_prefix=project_prefix,
+                force_create_overlays=args.force_create_overlays,
+                prefix_changed=prefix_changed,
+                prev_prefix=prev_prefix,
+                overlays_skipped=overlays_skipped,
             )
 
     profile = {

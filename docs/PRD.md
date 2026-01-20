@@ -6,7 +6,7 @@ status: draft
 # PRD: skillregistry (trusted) + project-bootstrap skill v0.1
 
 **Статус:** Draft / v0.1
-**Цель:** создать “trusted” репозиторий навыков `skillregistry` и bootstrap skill, который инициализирует проект (Codex + Claude) установкой нужных skills из доверенного банка и генерацией проектных overlay‑skills без поломки кастомизаций.
+**Цель:** создать “trusted” репозиторий навыков `skillregistry` и bootstrap skill, который инициализирует проект (Codex, Claude позже) установкой нужных skills из доверенного банка и генерацией проектных overlay‑skills без поломки кастомизаций.
 
 ---
 
@@ -35,8 +35,8 @@ status: draft
   - клонирует registry в проект (в `.agent/skillregistry`)
   - детектит стек проекта
   - выбирает нужные registry skills
-  - устанавливает их в `.codex/skills` и `.claude/skills`
-  - генерирует overlay‑skills (`project-workflow`, `api-*`) безопасно (не затирая ручные правки)
+  - устанавливает их в `.codex/skills` (Claude пока пропускается)
+  - генерирует overlay‑skills (`<prefix>-project-workflow`, `<prefix>-api-*`) безопасно (не затирая ручные правки)
 
 ### 2.2. Bootstrap skill (project-bootstrap)
 **Один стартовый skill**, который запускается в проекте и “поднимает” всё остальное.
@@ -59,8 +59,8 @@ status: draft
 ## 4) Термины
 
 - **registry skills** — навыки из `skillregistry/skills/*`, считаются read-only (в проекте не редактируем напрямую).
-- **overlay skills** — проектные навыки, генерируемые bootstrap’ом (например `project-workflow`, `api-<name>`). Их можно редактировать вручную; bootstrap **не должен** ломать эти кастомизации.
-- **targets** — `codex` и `claude` (установка в `.codex/skills` и `.claude/skills`).
+- **overlay skills** — проектные навыки, генерируемые bootstrap’ом (например `<prefix>-project-workflow`, `<prefix>-api-<name>`). Их можно редактировать вручную; bootstrap **не должен** ломать эти кастомизации.
+- **targets** — `codex` и `claude` (установка в `.codex/skills`, Claude пока пропускается и фиксируется в TODO/state).
 
 ---
 
@@ -115,10 +115,10 @@ Bootstrap должен:
 
 - источник: `.agent/skillregistry/skills/<name>`
 - destination:
-
-  - `.codex/skills/<name>`
-  - `.claude/skills/<name>`
-- registry skills **перезаписываются** (они read-only, управляются registry).
+  - `.codex/skills/<name>` (Claude пока пропускается)
+- метод установки:
+  - `--install-method skill-installer` (default): системный skill-installer, не перезаписывает существующие директории без `--force-overwrite-registry-skills`
+  - `--install-method local`: локальная копия из `.agent/skillregistry` (для тестов/офлайна)
 
 ### 5.5. Чистка устаревших registry skills
 
@@ -132,17 +132,21 @@ Bootstrap должен:
 
 Bootstrap должен создать/обеспечить overlay skills:
 
-- `project-workflow` (обязателен всегда)
-- `api-<name>` для каждого обнаруженного API (если есть)
+- `<prefix>-project-workflow` (обязателен всегда)
+- `<prefix>-api-<name>` для каждого обнаруженного API (если есть)
+
+Префикс:
+- по умолчанию берётся из имени корня проекта (slug, 3–4 символа)
+- можно переопределить через `--project-prefix`
+
+Если найден похожий overlay (например `project-workflow`, `*-project-workflow`, `api-foo`, `*-api-foo`), то создание пропускается, **если** не указан `--force-create-overlays` и префикс не был изменён.
+При смене префикса bootstrap не переименовывает старые overlays, а создаёт новые и оставляет TODO для ручной миграции.
 
 Overlay располагаются:
 
-- `.codex/skills/project-workflow/SKILL.md`
-- `.claude/skills/project-workflow/SKILL.md`
-- `.codex/skills/api-*/SKILL.md`
-- `.claude/skills/api-*/SKILL.md`
-- `.codex/skills/api-*/references/TODO.md` (только если отсутствует; не перезаписывать)
-- `.claude/skills/api-*/references/TODO.md` (только если отсутствует; не перезаписывать)
+- `.codex/skills/<prefix>-project-workflow/SKILL.md`
+- `.codex/skills/<prefix>-api-*/SKILL.md`
+- `.codex/skills/<prefix>-api-*/references/TODO.md` (только если отсутствует; не перезаписывать)
 
 ### 5.7. Безопасное обновление overlay skills (КЛЮЧЕВО)
 
@@ -173,7 +177,7 @@ Overlay располагаются:
 Bootstrap должен записывать:
 
 - `.agent/project_profile.json` — детект и inferred команды
-- `.agent/skills_state.json` — registry git/ref/commit, targets, registry_skills_installed, cleaned_registry_skills, overlay_generated_hashes
+- `.agent/skills_state.json` — registry git/ref/commit, targets, project_prefix, install_method, registry_skills_selected, registry_skills_installed, registry_skills_skipped, unsupported_targets, overlays_skipped, cleaned_registry_skills, overlay_generated_hashes
 - `.agent/skills_todo.md` — список TODO (проверить команды, заполнить API, merge overlay candidates и т.д.)
 - `.agent/overlays_pending/...` — кандидаты overlay файлов, если нельзя перезаписать текущие
 
@@ -235,9 +239,15 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 
 Флаги:
 
+- `--install-method skill-installer|local`
+- `--force-overwrite-registry-skills`
 - `--force-overwrite-overlays`
+- `--force-create-overlays`
 - `--adopt-existing-overlays`
+- `--project-prefix <prefix>`
 - `--no-clean-stale-registry-skills`
+
+`claude` target сейчас пропускается и фиксируется в TODO/state.
 
 Переменные окружения (альтернатива флагам):
 
@@ -250,7 +260,7 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 
 ### 9.1. Что коммитить
 
-- Коммитить overlays (project-workflow, api-*) — **да** (они часть проектного знания)
+- Коммитить overlays (<prefix>-project-workflow, <prefix>-api-*) — **да** (они часть проектного знания)
 - Не коммитить `.agent/skillregistry` — **нет** (это клон trusted registry)
 
 ### 9.2. Рекомендованный .gitignore snippet для проектов
@@ -267,11 +277,16 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 
 # Keep overlays, ignore registry skills (optional policy)
 .codex/skills/*
+!.codex/skills/*-project-workflow/**
 !.codex/skills/project-workflow/**
+!.codex/skills/*-api-*/**
 !.codex/skills/api-*/**
 
+# Claude (currently skipped, placeholder for later)
 .claude/skills/*
+!.claude/skills/*-project-workflow/**
 !.claude/skills/project-workflow/**
+!.claude/skills/*-api-*/**
 !.claude/skills/api-*/**
 ```
 
@@ -308,12 +323,12 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 - `select_registry_skills()` по skillsets.json
 - `load_prev_state()` из `.agent/skills_state.json`
 - `clean_stale_registry_skills()` по prev_state
-- `install_registry_skills()` (copytree)
+- `install_registry_skills()` (skill-installer/local)
 - `safe_write_overlay()` с политикой C + флагами
 - генерация overlays:
 
-  - `project-workflow` из template
-  - `api-*` из template + references/TODO.md (create-if-missing)
+  - `<prefix>-project-workflow` из template
+  - `<prefix>-api-*` из template + references/TODO.md (create-if-missing)
 - запись артефактов: project_profile.json, skills_state.json, skills_todo.md
 
 ### Шаг C: тесты/проверка (минимум)
@@ -322,10 +337,10 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 2. запустить bootstrap с `--skillregistry-git /Users/vi/projects/skillregistry`
 3. убедиться, что:
 
-   - registry skills поставились в `.codex/skills` и `.claude/skills`
+   - registry skills поставились в `.codex/skills` (claude пропускается)
    - overlays созданы
    - state/todo записаны
-4. модифицировать вручную `.codex/skills/project-workflow/SKILL.md`
+4. модифицировать вручную `.codex/skills/<prefix>-project-workflow/SKILL.md`
 5. перезапустить bootstrap → файл не должен перезаписаться, а кандидат должен появиться в `.agent/overlays_pending/...` + TODO
 
 ---
@@ -337,10 +352,11 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 - [ ] skillregistry создан, содержит структуру и файлы по PRD
 - [ ] bootstrap init работает в пустом проекте и в git‑репо
 - [ ] `.agent/skillregistry` создаётся и обновляется по ref
-- [ ] registry skills ставятся в `.codex/skills` и `.claude/skills`
+- [ ] registry skills ставятся в `.codex/skills` (claude пропускается)
 - [ ] stale registry skills удаляются по prev_state (если отключение флагом не включено)
-- [ ] overlay `project-workflow` создаётся всегда
-- [ ] overlay `api-*` создаётся при обнаружении API (или openapi files) хотя бы как skeleton
+- [ ] overlay `<prefix>-project-workflow` создаётся всегда
+- [ ] overlay `<prefix>-api-*` создаётся при обнаружении API (или openapi files) хотя бы как skeleton
+- [ ] при наличии похожего overlay создание пропускается без `--force-create-overlays`
 - [ ] overlay политика C соблюдается:
 
   - если overlay изменён вручную → не перезаписывать, писать кандидат и TODO

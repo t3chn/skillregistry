@@ -18,7 +18,7 @@ Design notes and history are tracked in beads; this repo stays “runtime-minima
 ## Quickstart (project bootstrap)
 1) Install `project-bootstrap` globally:
    - Codex: `~/.codex/skills/project-bootstrap/`
-   - Claude: `~/.claude/skills/project-bootstrap/`
+   - Claude: `~/.claude/skills/project-bootstrap/` (optional; claude support is TODO)
 2) Run bootstrap inside a project repo:
 
 ```bash
@@ -28,7 +28,9 @@ python3 .agent/skillregistry/skills/project-bootstrap/scripts/bootstrap.py init 
 ```
 
 Bootstrap is safe to re-run: registry skills update, overlays are protected.
-Overlays are overwritten only if unchanged since last generation.
+Overlays are prefixed (`<prefix>-project-workflow`, `<prefix>-api-*`) and overwritten only if unchanged since last generation.
 Use `--force-overwrite-overlays` to overwrite anyway.
+Use `--install-method local` for offline/tests and `--project-prefix` to override the prefix.
+Claude targets are currently skipped (recorded in `.agent/skills_todo.md`).
 
 See `docs/BOOTSTRAP.md` for the full flow and `docs/PRD.md` for the canonical spec.
