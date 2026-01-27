@@ -13,7 +13,11 @@ status: active
 ## 1) Beads (mandatory from the start)
 - [ ] `bd onboard` → `bd ready`
 - [ ] Create starter issues: `bootstrap`, `prek`, `ci`, `dev-env`, `docs`
-- [ ] For monorepo: add `web-*`, `mobile-*`, `backend-*`, `shared-*`
+- [ ] Monorepo: split work by area (choose a convention and stick to it)
+  - [ ] Option A (recommended): create one epic per area (`web`, `mobile`, `backend`, `shared`) and add child tasks via `--parent`
+  - [ ] Option B: keep tasks flat, but enforce title prefixes (`web:`, `mobile:`, `backend:`) + labels (`web`, `mobile`, `backend`, `shared`)
+  - [ ] Option C (advanced): separate backlogs via rigs (only if you truly need isolated workflows)
+- [ ] Monorepo: define cross-cutting buckets (`shared`, `infra`, `ci`, `docs`) and use `bd dep` for cross-area blockers
 - [ ] `bd sync` after meaningful progress
 
 ## 2) Prek (mandatory from the start)
